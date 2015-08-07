@@ -133,12 +133,6 @@ if __name__ == '__main__':
 
     bse.vec['pt_str'].export_tec_str()
     #bse.vec['df'].export_tec_scatter()
-    bse.vec['cp'].export_tec_scatter()
+    #bse.vec['cp'].export_tec_scatter()
     #bse.vec['pt'].export_tec_scatter()
-    bse.vec['cp_str'].export_IGES()
-
-    import os
-    #Rename the geometry output file
-    os.system('mv pt_str_surf.dat modified.dat')
-    os.system('tec360 layout_le.lay')
-    os.system('mv cp_str.igs modified.igs')
+    #bse.vec['cp_str'].export_IGES()

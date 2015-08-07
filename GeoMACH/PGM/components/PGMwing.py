@@ -114,6 +114,90 @@ class PGMwing(PGMprimitive):
                 self._shapes[name][:,j,:] = Q[:,:]
                 self._shapes[name][:,j,2] = 0.0
 
+    def set_airfoil_new(self, filename=['naca0012','naca0012'], pos_v =[0,1], order_v = 2, blunt_thk=0.0, blunt_pos=0.95, bunch_LE=1.0, bunch_TE=1.0):
+
+        from GeoMACH.PGM.PGMlib import computebspline
+
+        numSections = len(filename)
+
+        for name in ['upp', 'low']: #Loop for each face
+            numCpsPerChordSurf = self.faces[name]._num_cp_list['u'] #Get the number of chord-wise control points
+            numPtsPerChordSurf = self.faces[name]._num_pt_list['u'] #Get the number of chord-wise points
+            numCpsPerSpanSurf = self.faces[name]._num_cp_list['v'] #Get the number of span-wise control points
+            numPtsPerChord = sum(numPtsPerChordSurf) + 1
+
+            #First we need to create an array that contains all the normalized control points that belongs to the specified sections. These control points will be interpolated from the airfoil coordinate points.
+            Q_total = numpy.zeros((numCpsPerChordSurf+1,numSections,3))
+            for index in range(len(filename)): #For each specified airfoil
+                current_filename = filename[index] #Get the airfoil name
+                if current_filename[:4]=='naca' or current_filename[:4]=='NACA':
+                    airfoils = self._get_airfoil_naca(current_filename[4:])
+                else:
+                    airfoils = self._get_airfoil_file(current_filename)
+
+                P = self._get_P(numPtsPerChord, airfoils, name, bunch_LE, bunch_TE)
+                P[:, 0] /= numpy.max(P[:, 0])
+                P[:, 1] -= numpy.linspace(P[0,1], P[-1,1], P.shape[0])
+
+                if name == 'upp':
+                    sign = 1.0
+                elif name == 'low':
+                    sign = -1.0
+                t, p, x = blunt_thk, blunt_pos, P[:, 0]
+                P[:, 1] += sign * t * (-2*(x/p)**3 + 3*(x/p)**2) * (x < p)
+                P[:, 1] += sign * t * numpy.sqrt(1 - (numpy.maximum(x,2*p-1) - p)**2/(1-p)**2) * (x >= p)
+
+                Q = self._get_Q(numCpsPerChordSurf, numPtsPerChordSurf, P) #These are the normalized control points for this section
+                Q_total[:,index,:] = Q #Store them into the full matrix
+
+            #Interpolate using B-splines
+            #ATTENTION: in this part of code "control points" refers to the control points of the sections where the airfoil is specified, while "points" refers to the control points of the sections where the airfoil is not specified. The transformation will be the same for every chord-wise points, so we just need to find the span-wise interpolation. That's why we use only 2 control points in u for this.
+            num_pt = {'u':0, 'v':0}
+            order = {'u':0, 'v':0}
+            num_cp = {'u':0, 'v':0}
+            pos = {'u':0, 'v':0}
+
+            num_pt['u'] = 1
+            num_pt['v'] = numCpsPerSpanSurf+1
+            order['u'] = 2
+            order['v'] = order_v
+            num_cp['u'] = 2
+            num_cp['v'] = len(pos_v)
+            nnz = num_pt['u'] * num_pt['v'] * order['u'] * order['v']
+            cp_indices = numpy.array(range(num_cp['u']*num_cp['v'])).reshape((num_cp['u'],num_cp['v']))
+            pt_indices = numpy.array(range(num_pt['u']*num_pt['v'])).reshape((num_pt['u'],num_pt['v']))
+            pos['u'] = numpy.array([0,1])
+            pos['v'] = pos_v
+
+            vals, rows, cols \
+                = computebspline(nnz, 
+                                 order['u'], order['v'],
+                                 num_cp['u'], num_cp['v'],
+                                 num_pt['u'], num_pt['v'],
+                                 cp_indices, pt_indices,
+                                 pos['u'], pos['v'])
+
+            #Reshape transformation matrix
+            dQbar_dQ = scipy.sparse.csr_matrix((vals, (rows, cols)), shape=(num_pt['u']*num_pt['v'], num_cp['u']*num_cp['v']))
+            #Take just the first span-wise transformation, as it will be the same for every station
+            dQbar_dQ = dQbar_dQ[:,:num_cp['v']]
+
+            #TRANFORMATION
+            #Preallocate the interpolated control points
+            Qbar = numpy.zeros((numCpsPerChordSurf+1,numCpsPerSpanSurf+1,3))
+            for chord_index in range(numCpsPerChordSurf+1):
+                for dim in range(3):
+                    #Qpiece = Q[chord_index,:,dim]
+                    Qbar[chord_index,:,dim] = dQbar_dQ.dot(Q_total[chord_index,:,dim])
+
+            print Qbar
+
+            '''
+            for j in range(self.faces[name]._num_cp_total['v']):
+            self._shapes[name][:,j,:] = Q[:,:]
+            self._shapes[name][:,j,2] = 0.0
+            '''
+
     def _get_Q(self, ms, ns, P0):
         nsurf = ns.shape[0]
 
