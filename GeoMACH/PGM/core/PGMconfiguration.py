@@ -62,10 +62,11 @@ class PGMconfiguration(object):
        GeoMACH B-spline Surface-modeling Engine (BSE) object
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """ Initialize attributes """
         self.comps = OrderedDict()
         self.dvs = OrderedDict()
+        #self.kwargs = kwargs
 
         self._vecs = OrderedDict()
         self._jacs = OrderedDict()

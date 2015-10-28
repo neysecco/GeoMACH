@@ -60,7 +60,8 @@ if __name__ == '__main__':
 
     pgm = Wing()
     bse = pgm.initialize()
-    pgm.comps['wing'].set_airfoil(filename=['naca0012','rae2822.dat'])
+    pgm.comps['wing'].set_airfoil(filename=['naca0019','rae2822.dat'])
+    pgm.compute_all()
     bse.vec['pt_str'].export_tec_str()
     bse.vec['cp_str'].export_IGES()
     exit()
