@@ -283,3 +283,4 @@ if __name__ == '__main__':
     bse.vec['cp'].export_tec_scatter()
     bse.vec['pt'].export_tec_scatter()
     bse.vec['cp_str'].export_IGES()
+    bse.vec['cp_str'].export_plot3d()

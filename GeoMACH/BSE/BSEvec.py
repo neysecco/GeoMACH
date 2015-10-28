@@ -37,7 +37,7 @@ class BSEvec(object):
     def _write_line(self, data, label=''):
         self._file.write(label)
         for ind in range(data.shape[0]):
-            if data[ind] == data[ind]:
+            if data[ind] == data[ind]: ##?????
                 self._file.write(str(data[ind]) + ' ')
             else:
                 self._file.write(str(0.0) + ' ')
@@ -106,6 +106,49 @@ class BSEvecStr(BSEvec):
                 for ind_v in xrange(num_v):
                     for ind_u in xrange(num_u):
                         self._write_line(surf[ind_u, ind_v, :])
+        self._close_file()
+
+    def export_plot3d(self, filename=None, var_names=None):
+        # Each block of the plot3d file represents a GeoMACH surface
+
+        if filename is None:
+            filename = self.name + '_surf.xyz'
+        if var_names is None:
+            var_names = self._default_var_names
+
+        # Open file
+        self._open_file(filename)
+
+        # Create a list of indices of non-hidden surfaces
+        surf_list = numpy.where(-self._hidden)[0]
+
+        # Write number of blocks (which is equivalent to the number of non-hidden surfaces)
+        self._write('%d\n'% len(surf_list))
+
+        # Write dimensions of each block
+        for isurf in surf_list:
+            # Get the number of points
+            surf = self.surfs[isurf]
+            num_u, num_v = surf.shape[:2]
+            # Write 3 integers corresponding to each of the block dimensions
+            self._write('%d %d %d\n'% (num_u, num_v, 1))
+
+        # Write coordinates of each block
+        for isurf in surf_list:
+            if not False: #self._hidden[isurf]:
+                surf = self.surfs[isurf]
+                num_u, num_v = surf.shape[:2]
+                # Dimension is the outermost variable that should change
+                for idim in xrange(3):
+                    # V should be the second variable to change
+                    for ind_v in xrange(num_v):
+                        # The last one that should change is U
+                        for ind_u in xrange(num_u):
+                            self._write('%20.15g\n'% surf[ind_u, ind_v, idim])
+                # Line break to start another block
+                self._write('\n')
+
+        # Close file
         self._close_file()
 
     def export_STL(self, filename=None, var_names=None):

@@ -22,6 +22,7 @@ subroutine computeTip(nD, nu, nv, f0, N, S, inds, Da, Di, Dj)
   !Working
   integer i, j, k, iD
   double precision den, C(4), u
+  real, parameter :: pi = 3.1415927
 
   Da(:) = 0.0
   Di(:) = 0
@@ -54,8 +55,9 @@ subroutine computeTip(nD, nu, nv, f0, N, S, inds, Da, Di, Dj)
   den = 1.0 / (nu-1)
   do i=2,nu-1
      u = den * (i-1)
-     call sparseBezier(u, -f0, f0, C)
      do j=1,nv
+        f = f0*sin(pi/2.0*(j-1)/nv-1))
+        call sparseBezier(u, -f0, f0, C)
         do k=1,3
            Da(iD+1:iD+4) = C(:)
            Di(iD+1:iD+4) = inds(i, j, k)
