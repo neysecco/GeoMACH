@@ -85,18 +85,23 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
 
   !Working
   integer i, j, k, iD, nuC, nvC
-  double precision den, C(4), u, v, t, pi
+  double precision den, C(4), u, v, t, pi, f_u, f_v
 
   pi = 2*acos(0.0)
 
   nuC = int((nu-1)/2) + 1
   nvC = int((nv-1)/2) + 1
 
+  ! Da will represent the weighting factors
   Da(:) = 0.0
+  ! Di will represent the indices of the cone nodes (interpolated)
   Di(:) = 0
+  ! Dj will represent the indices of the primary nodes (donors)
   Dj(:) = 0
   
   iD = 0
+
+  ! First we set identities (D=1.0) to copy copy the tip-wing interface points
 
   ! Border: N
   i = 1
@@ -109,7 +114,7 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
      end do
   end do
 
-  ! Border: S
+  ! Border: S -- Usual method: just copy border from primitive component
   i = nu
   do j=1,nv
      do k=1,3
@@ -119,6 +124,25 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
         Dj(iD) = S(j, 1, k)
      end do
   end do
+
+  ! Border: S -- Alternative method: B-spline with upper and lower edges of the trailing edge
+  ! Adjust index before the new loop
+  !i = nu
+  !do j=1,nv
+     ! Find vertical position fraction
+     !v = (j-1.0)/(nv-1.0)
+     ! Use Bezier curve to find weights
+     !call sparseBezier(v, -f0/10.0, f0/10.0, C)
+     !do k=1,3
+        !Da(iD+1:iD+4) = C(:)
+        !Di(iD+1:iD+4) = inds(i, j, k)
+        !Dj(iD+1) = W(i,1,k)
+        !Dj(iD+2) = W(i,2,k)
+        !Dj(iD+3) = E(i,1,k)
+        !Dj(iD+4) = E(i,2,k)
+        !iD = iD + 4
+     !end do
+  !end do
 
   ! Border: W
   j = 1
@@ -143,11 +167,34 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
   end do
 
   ! Center point
-  call sparseBezier(dble(0.5), -f0, f0, C)
+  ! The center point will be created by extrapolating the center points on opposite faces
+  ! of the primary component and finding where they match
+  !
+  !                     N face
+  !                       nvC
+  !             +----------+----------+
+  !             |          |          |
+  !             |          V          |
+  !             |          V Center   |
+  !  W face nuC +-------->>+<<--------+ nuC  E face
+  !             |          ^          |
+  !             |          ^          |
+  !             |          |          |
+  !             +----------+----------+
+  !                       nvC
+  !                     S face
+  !
+
+  f_v = f0*v_correction(dble(0.5))
+  f_u = f0*u_correction(dble(0.5))
+  ! Get the interpolation weights using Bezier
+  call sparseBezier(dble(0.5), -f_u, f_u, C)
+  ! Get indices of the middle nodes of the primary faces
   i = nuC
   j = nvC
   do k=1,3
      Da(iD+1:iD+4) = 0.5 * C(:)
+     call sparseBezier(dble(0.5), -f_v, f_v, C)
      Da(iD+5:iD+8) = 0.5 * C(:)
      Di(iD+1:iD+8) = inds(i, j, k)
      Dj(iD+1) = N(j,1,k)
@@ -161,14 +208,39 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
      iD = iD + 8
   end do
 
+  ! INTERIOR WIREFRAME
+  ! The wirefram will also be created by extrapolating opposite points
+  ! of the primary component and finding where they match
+  !
+  !                      N face
+  !      +--v              nvC
+  !      |      +-----------+-----------+
+  !      u      |           |           |
+  !             |           o top       |
+  !             |           |           |
+  !             |           o           |
+  !             |   left    |   right   |
+  !  W face nuC +--o--o--o--+--o--o--o--+ nuC  E face
+  !             |           |           |
+  !             |           o           |
+  !             |           | bottom    |
+  !             |           o           |
+  !             |           |           |
+  !             +-----------+-----------+
+  !                       nvC
+  !                     S face
+  !
+
   i = nuC
   den = 1.0 / (nv-1)
   ! Bezier: left
   do j=2,nvC-1
      v = den * (j-1)
      t = 0.5 * tanh(a*(v-0.5)) / tanh(a*0.5) + 0.5
+     f_u = f0*u_correction(dble(0.5))
+     f_v = f0*v_correction(t)
      do k=1,3
-        call sparseBezier(t, -f0, f0, C)
+        call sparseBezier(t, -f_v, f_v, C)
         Da(iD+1:iD+4) = (1-v) * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = W(i,1,k)
@@ -176,7 +248,7 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
         Dj(iD+3) = E(i,1,k)
         Dj(iD+4) = E(i,2,k)
         iD = iD + 4
-        call sparseBezier(dble(0.5), -f0, f0, C)
+        call sparseBezier(dble(0.5), -f_u, f_u, C)
         Da(iD+1:iD+4) = v * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = N(j,1,k)
@@ -190,8 +262,10 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
   do j=nvC+1,nv-1
      v = den * (j-1)
      t = 0.5 * tanh(a*(v-0.5)) / tanh(a*0.5) + 0.5
+     f_u = f0*u_correction(dble(0.5))
+     f_v = f0*v_correction(t)
      do k=1,3
-        call sparseBezier(t, -f0, f0, C)
+        call sparseBezier(t, -f_v, f_v, C)
         Da(iD+1:iD+4) = v * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = W(i,1,k)
@@ -199,7 +273,7 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
         Dj(iD+3) = E(i,1,k)
         Dj(iD+4) = E(i,2,k)
         iD = iD + 4
-        call sparseBezier(dble(0.5), -f0, f0, C)
+        call sparseBezier(dble(0.5), -f_u, f_u, C)
         Da(iD+1:iD+4) = (1-v) * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = N(j,1,k)
@@ -216,8 +290,10 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
   do i=2,nuC-1
      u = den * (i-1)
      t = 0.5 * tanh(a*(u-0.5)) / tanh(a*0.5) + 0.5
+     f_u = f0*u_correction(t)
+     f_v = f0*v_correction(dble(0.5))
      do k=1,3
-        call sparseBezier(t, -f0, f0, C)
+        call sparseBezier(t, -f_u, f_u, C)
         Da(iD+1:iD+4) = (1-u) * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = N(j,1,k)
@@ -225,7 +301,7 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
         Dj(iD+3) = S(j,1,k)
         Dj(iD+4) = S(j,2,k)
         iD = iD + 4
-        call sparseBezier(dble(0.5), -f0, f0, C)
+        call sparseBezier(dble(0.5), -f_v, f_v, C)
         Da(iD+1:iD+4) = u * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = W(i,1,k)
@@ -239,8 +315,10 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
   do i=nuC+1,nu-1
      u = den * (i-1)
      t = 0.5 * tanh(a*(u-0.5)) / tanh(a*0.5) + 0.5
+     f_u = f0*u_correction(t)
+     f_v = f0*v_correction(dble(0.5))
      do k=1,3
-        call sparseBezier(t, -f0, f0, C)
+        call sparseBezier(t, -f_u, f_u, C)
         Da(iD+1:iD+4) = u * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = N(j,1,k)
@@ -248,7 +326,7 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
         Dj(iD+3) = S(j,1,k)
         Dj(iD+4) = S(j,2,k)
         iD = iD + 4
-        call sparseBezier(dble(0.5), -f0, f0, C)
+        call sparseBezier(dble(0.5), -f_v, f_v, C)
         Da(iD+1:iD+4) = (1-u) * C(:)
         Di(iD+1:iD+4) = inds(i, j, k)
         Dj(iD+1) = W(i,1,k)
@@ -262,5 +340,49 @@ subroutine computeConeWireframe(nD, nu, nv, a, f0, W, E, N, S, inds, Da, Di, Dj)
   if (iD .ne. nD) then
      print *, 'Error in computeConeWireframe', iD, nD
   end if
+
+  ! Auxiliary function
+
+  contains
+
+    function u_correction(x)
+      ! This functions gives a number between 0 and 1
+      ! that will be applied to the interpolant weights f0
+      ! so that the tip becomes rounded when seen from a top view
+      
+      ! Function inputs
+      double precision, intent(in) :: x
+
+      ! Function output
+      double precision :: u_correction
+
+      ! Working
+      double precision :: x_p
+
+      ! Apply correction to z so that we stay close to the LE for longer
+      !x_p = (20.0**x-1)/(20.0-1)
+      x_p = log(20.0*x+1.0)/log(20.0+1.0)
+
+      ! Use naca airfoil polynomial
+      u_correction = 30.0*0.5*(0.2969*sqrt(x_p) - 0.1260*x_p - 0.3516*x_p**2 + 0.2843*x_p**3 - 0.1036*x_p**4)
+      !u_correction = 1.0
+
+    end function u_correction
+
+    function v_correction(x)
+      ! This functions gives a number between 0 and 1
+      ! that will be applied to the interpolant weights f0
+      ! so that the points in the midplane are not too far even with high f0
+      
+      ! Function inputs
+      double precision, intent(in) :: x
+
+      ! Function output
+      double precision :: v_correction
+
+      ! Use naca airfoil polynomial
+      v_correction = 0.75 + (x-0.5)**2
+
+    end function v_correction
 
 end subroutine computeConeWireframe

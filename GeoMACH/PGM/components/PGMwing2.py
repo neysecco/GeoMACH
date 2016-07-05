@@ -19,7 +19,7 @@ class PGMwing2(PGMprimitive):
     """ Wing component """
 
     def __init__(self, num_x=1, num_z=1,
-                 left_closed=False, right_closed=False, round_te=False):
+                 left_end='open', right_end='open', round_te=False):
         """
         Parameters
         ----------
@@ -27,9 +27,10 @@ class PGMwing2(PGMprimitive):
            Number of surfaces in the chord-wise direction
         num_z : ``integer``
            Number of surfaces in the span-wise direction
-        left_closed, right_closed : ``bool``
-           ``True`` if closed and 
-           ``False`` if attached to another component
+        left_end, right_end : ``string``
+           ``open`` if open,
+           ``tip`` if attached to tip component
+           ``junction`` if attached to a junction component
         """
         super(PGMwing2, self).__init__()
 
@@ -37,8 +38,8 @@ class PGMwing2(PGMprimitive):
         self._num_surf['y'] = 1
         self._num_surf['z'] = num_z
 
-        self._left_closed = left_closed
-        self._right_closed = right_closed
+        self._left_end = left_end
+        self._right_end = right_end
         self._round_te = round_te
 
         self._ax1 = 3
@@ -114,6 +115,42 @@ class PGMwing2(PGMprimitive):
         else:
             self.set_airfoil()
 
+    def compute(self, name):
+        '''
+        This method will run the "compute" method of the PGMprimitive class.
+        It also will update the trailing edge control points if necessary.
+        '''
+
+        # Run the "compute" method from the PGMprimitive class
+        vals_list, rows_list, cols_list = super(PGMwing2, self).compute(name)
+
+        '''
+        # Now we update the trailing edge points
+        if name == 'cp_prim':
+            face = self.faces['te']
+
+            # Import bezier curve function
+            from GeoMACH.PGM.PGMlib import sparsebezier
+            # Get number of control points in the trailing edge
+            num_u = self.faces['te']._num_cp_total['u']
+            for i in range(num_u):
+                # Use a Bezier curve to get the weighting coefficients
+                C = sparsebezier(i/(num_u-1), -0.5, 0.5)
+                # Apply weights to the jacobian for each coordiante (x,y, and z)
+                for k in range(3):
+                    vals = C[:]
+                    
+
+                # Apply weights to find coordinates of the trailing edge points
+                #self._shapes['te'][i,-1,:] = C[0]*self._shapes['te'][0,-1,:] + \
+                #                             C[1]*self._shapes['te'][0,-2,:] + \
+                #                             C[2]*self._shapes['te'][-1,-1,:] + \
+                #                             C[3]*self._shapes['te'][-1,-2,:]
+        '''
+
+        #RETURNS
+        return vals_list, rows_list, cols_list
+
     def set_diff(self):
         # This method set differentiability options for the control points
         # We need to use C0 continuity if we want sharp corners
@@ -129,15 +166,17 @@ class PGMwing2(PGMprimitive):
         # Now we turn off the continuities we want
 
         # UPPER SKIN
+        # u - TE to LE
+        # v - right to left (from pilot's view)
         # Get reference to the upper surface
         face = self.faces['upp']
         #C0 left edge if we have and open end
-        if not self._left_closed:
+        if self._left_end is 'open':
             face.set_diff_surf(False, ind_j=-1, ind_v=2)
             # Still leave edge-edge continuity
             face.set_diff_edge(True, 'v1', ind_j=-1)
         #C0 right edge if we have an open end
-        if not self._right_closed:
+        if self._right_end is 'open':
             face.set_diff_surf(False, ind_j=0, ind_v=0)
             # Still leave edge-edge continuity
             face.set_diff_edge(True, 'v0', ind_j=0)
@@ -146,36 +185,40 @@ class PGMwing2(PGMprimitive):
             face.set_diff_surf(False, ind_i=0, ind_u=0)
             # Keep continuity along the edge only
             face.set_diff_edge(True, 'u0', ind_i=0)
-            # Turn of discontinuity at corners where we have open ends
-            if not self._left_closed:
+            # Turn off continuity at TE corners where we have open ends
+            if self._left_end is 'open':
                 face.set_diff_corner(False, ind_i=0, ind_j=-1)
-            if not self._right_closed:
+            if self._right_end is 'open':
                 face.set_diff_corner(False, ind_i=0, ind_j=0)
 
         # LEADING EDGE
-        # Get reference to the upper surface
+        # u - up to down
+        # v - right to left (from pilot's view)
+        # Get reference to the leading edge
         face = self.faces['le']
         #C0 left edge if we have and open end
-        if not self._left_closed:
+        if self._left_end is 'open':
             face.set_diff_surf(False, ind_j=-1, ind_v=2)
             # Still leave edge-edge continuity
             face.set_diff_edge(True, 'v1', ind_j=-1)
         #C0 right edge if we have an open end
-        if not self._right_closed:
+        if self._right_end is 'open':
             face.set_diff_surf(False, ind_j=0, ind_v=0)
             # Still leave edge-edge continuity
             face.set_diff_edge(True, 'v0', ind_j=0)
 
         # LOWER SKIN
-        # Get reference to the upper surface
+        # u - LE to TE
+        # v - right to left (from pilot's view)
+        # Get reference to the lower surface
         face = self.faces['low']
         #C0 left edge if we have and open end
-        if not self._left_closed:
+        if self._left_end is 'open':
             face.set_diff_surf(False, ind_j=-1, ind_v=2)
             # Still leave edge-edge continuity
             face.set_diff_edge(True, 'v1', ind_j=-1)
         #C0 right edge if we have an open end
-        if not self._right_closed:
+        if self._right_end is 'open':
             face.set_diff_surf(False, ind_j=0, ind_v=0)
             # Still leave edge-edge continuity
             face.set_diff_edge(True, 'v0', ind_j=0)
@@ -184,39 +227,41 @@ class PGMwing2(PGMprimitive):
             face.set_diff_surf(False, ind_i=-1, ind_u=2)
             # Keep continuity along the edge only
             face.set_diff_edge(True, 'u1', ind_i=-1)
-            # Turn of discontinuity at corners where we have open ends
-            if not self._left_closed:
+            # Turn off continuity at TE corners where we have open ends
+            if self._left_end is 'open':
                 face.set_diff_corner(False, ind_i=-1, ind_j=-1)
-            if not self._right_closed:
+            if self._right_end is 'open':
                 face.set_diff_corner(False, ind_i=-1, ind_j=0)
 
         # TRAILING EDGE
-        # Get reference to the upper surface
+        # u - down to up
+        # v - right to left (from pilot's view)
+        # Get reference to the trailing edge
         face = self.faces['te']
         #C0 left edge if we have and open end
-        if not self._left_closed:
+        if self._left_end is 'open':
             face.set_diff_surf(False, ind_j=-1, ind_v=2)
+            # Still leave edge-edge continuity
+            face.set_diff_edge(True, 'v1', ind_j=-1)
         #C0 right edge if we have an open end
-        if not self._right_closed:
+        if self._right_end is 'open':
             face.set_diff_surf(False, ind_j=0, ind_v=0)
+            # Still leave edge-edge continuity
+            face.set_diff_edge(True, 'v0', ind_j=0)
         #C0 trailing edge if we have it sharp
         if not self._round_te:
             # C0 between lower skin and TE
             face.set_diff_surf(False, ind_i=0, ind_u=0)
             # C0 between upper skin and TE
             face.set_diff_surf(False, ind_i=-1, ind_u=2)
-            # C0 between left end and TE
-            face.set_diff_surf(False, ind_j=-1, ind_v=2)
-            # C0 between right end and TE
-            face.set_diff_surf(False, ind_j=0, ind_v=0)
             # But still keep edge-to-edge continuity along the edges between TE and skins
             face.set_diff_edge(True, 'u0', ind_i=0)
             face.set_diff_edge(True, 'u1', ind_i=-1)
             # Turn on discontinuity at corners where we have open ends
-            if not self._left_closed:
+            if self._left_end is 'open':
                 face.set_diff_corner(False, ind_i=0, ind_j=-1)
                 face.set_diff_corner(False, ind_i=-1, ind_j=-1)
-            if not self._right_closed:
+            if self._right_end is 'open':
                 face.set_diff_corner(False, ind_i=0, ind_j=0)
                 face.set_diff_corner(False, ind_i=-1, ind_j=0)
 
@@ -313,7 +358,7 @@ class PGMwing2(PGMprimitive):
         if filename[:4]=='naca' or filename[:4]=='NACA':
             airfoils = self._get_airfoil_naca(filename[4:],LE_pos)
         else:
-            airfoils = self._get_airfoil_file(filename)
+            airfoils = self._get_airfoil_file(filename,LE_pos)
 
         import matplotlib.pyplot as plt
         fig = plt.figure()
@@ -326,18 +371,9 @@ class PGMwing2(PGMprimitive):
             P = self._get_P(nP, airfoils, name, bunch_LE, bunch_TE)
             #P[:, 1] -= numpy.linspace(P[0,1], P[-1,1], P.shape[0])
 
-            '''
-            if name == 'upp':
-                sign = 1.0
-            elif name == 'low':
-                sign = -1.0
-            t, p, x = blunt_thk, blunt_pos, P[:, 0]
-            P[:, 1] += sign * t * (-2*(x/p)**3 + 3*(x/p)**2) * (x < p)
-            P[:, 1] += sign * t * numpy.sqrt(1 - (numpy.maximum(x,2*p-1) - p)**2/(1-p)**2) * (x >= p)
-            '''
-
             Q = self._get_Q(ms, ns, P)
-            for j in range(self.faces[name]._num_cp_total['v']):
+            num_v = self.faces[name]._num_cp_total['v']
+            for j in range(num_v):
                 if name in ['upp','low']:
                     # Make sure the last point is at x=1.0
                     Q[:, 0] /= numpy.max(Q[:, 0])
@@ -345,12 +381,46 @@ class PGMwing2(PGMprimitive):
                     # Set TE to x=1.0
                     Q[:, 0] = Q[0, 0]
                 self._shapes[name][:,j,:] = Q[:,:]
-                self._shapes[name][:,j,2] = 0.0
+                self._shapes[name][:,j,2] = j/(num_v-1)
             
             '''
             plt.plot(self._shapes[name][:,0,0],self._shapes[name][:,0,1])
             plt.show()
             '''
+
+        '''
+        # If one of the sides is closed with a wingtip, we need to do a rounded trailing edge
+        # This will be shaped as a B-spline using the upper and lower sides of the trailing edge
+        if not self._left_closed:
+            # Import bezier curve function
+            from GeoMACH.PGM.PGMlib import sparsebezier
+            # Get number of control points in the trailing edge
+            num_u = self.faces['te']._num_cp_total['u']
+            for i in range(num_u):
+                # Use a Bezier curve to get the weighting coefficients
+                C = sparsebezier(i/(num_u-1), -0.5, 0.5)
+                # Apply weights to find coordinates of the trailing edge points
+                self._shapes['te'][i,-1,:] = C[0]*self._shapes['te'][0,-1,:] + \
+                                             C[1]*self._shapes['te'][0,-2,:] + \
+                                             C[2]*self._shapes['te'][-1,-1,:] + \
+                                             C[3]*self._shapes['te'][-1,-2,:]
+            self._shapes['te'][:,-1,2] = self._shapes['te'][:,-1,2] + (1.0 - max(self._shapes['te'][:,-1,2]))
+            print self._shapes['te'][:,-1,2]
+                
+        if not self._right_closed:
+            # Import bezier curve function
+            from GeoMACH.PGM.PGMlib import sparsebezier
+            # Get number of control points in the trailing edge
+            num_u = self.faces['te']._num_cp_total['u']
+            for i in range(num_u):
+                # Use a Bezier curve to get the weighting coefficients
+                C = sparsebezier(i/(num_u-1), -0.5, 0.5)
+                # Apply weights to find coordinates of the trailing edge points
+                self._shapes['te'][i,0,:] = C[0]*self._shapes['te'][0,0,:] + \
+                                             C[1]*self._shapes['te'][0,1,:] + \
+                                             C[2]*self._shapes['te'][-1,0,:] + \
+                                             C[3]*self._shapes['te'][-1,1,:]
+        '''
 
     def _get_Q(self, ms, ns, P0):
         nsurf = ns.shape[0]
@@ -451,7 +521,7 @@ class PGMwing2(PGMprimitive):
         # Define number of points
         num = 100 # Total number of points from Leading Edge to Trailing Edge
 
-        # Read airfoil data form the given numbers
+        # Read airfoil data from the given numbers
         max_cmb = int(naca[0]) / 100.0
         pos_cmb = int(naca[1]) / 10.0
         thickness = int(naca[2:4]) / 100.0
@@ -523,8 +593,6 @@ class PGMwing2(PGMprimitive):
 
     def _get_airfoil_file(self, filename, LE_pos):
 
-        ### HELP ###
-
         path = __import__(__name__).__file__
         index_slash = path[::-1].index('/')
         path = path[:-index_slash]
@@ -532,15 +600,56 @@ class PGMwing2(PGMprimitive):
 
         if data[0,0] > data[1,0]:
             mark = numpy.argmin(data,0)[0]
-            upper = data[:mark+1,:]
+            upper = data[mark+1::-1,:]
             lower = data[mark:,:]
         else:
             for i in range(data.shape[0]-1):
                 if abs(data[i+1,0]-data[i,0]) > 0.8:
                     mark = i
-            upper = data[mark::-1,:]
+            upper = data[:mark,:]
             lower = data[mark+1:,:]
-        return {'upp': upper, 'low': lower}
+
+        # Rescale things so that chord ends at 1.0
+        upper = upper/numpy.max(upper[:,0])
+        lower = lower/numpy.max(lower[:,0])
+
+        # Now we need to crop the upper and lower skins to give room for the LE
+        # First for the upper skin
+        # Find the index that crosses the LE_pos limit
+        LE_limit = next(enum[0] for enum in enumerate(upper[:,0]) if enum[1] > LE_pos)
+        print LE_limit
+        # Add upper skin coordinates (from TE to LE)
+        upper_crop = upper[:LE_limit-2:-1,:]
+        # Add upper LE coordinates
+        le_crop = upper[LE_limit-1::-1,:]
+
+        # Now the lower skin
+        # Find the index that crosses the LE_pos limit
+        LE_limit = next(enum[0] for enum in enumerate(lower[:,0]) if enum[1] > LE_pos)
+        # Add lower skin coordinates (from LE to TE)
+        lower_crop = lower[LE_limit-1:,:]
+        # Add lower LE coordinates
+        le_crop = numpy.vstack([le_crop, lower[:LE_limit,:]])
+
+        # Add TE coordinates (just a straigth line at x=1)
+        te_crop = numpy.zeros((12, 2), order='F') # We'll add twelve vertical points on the TE
+        te_crop[:,0] = 1.0
+        te_crop[:,1] = numpy.linspace(lower_crop[-1,1],upper_crop[0,1],12) # Connection between TE and lower skin
+
+        '''
+        import matplotlib.pyplot as plt
+        fig = plt.figure()
+        #plt.plot(upper[:,0],upper[:,1])
+        #plt.plot(lower[:,0],lower[:,1])
+        plt.plot(upper_crop[:,0],upper_crop[:,1],label='upp')
+        plt.plot(lower_crop[:,0],lower_crop[:,1],label='low')
+        plt.plot(le_crop[:,0],le_crop[:,1],label='le')
+        plt.plot(te_crop[:,0],te_crop[:,1],label='te')
+        plt.legend()
+        plt.show()
+        '''
+
+        return {'upp': upper_crop, 'le': le_crop, 'low': lower_crop, 'te': te_crop}
 
     def add_thk_con(self, name, urange, vrange, factor):
 	self.funcs[name] = WingThicknessFunction(self, name, urange, vrange, factor)

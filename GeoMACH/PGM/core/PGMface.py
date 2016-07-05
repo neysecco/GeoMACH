@@ -189,6 +189,24 @@ class PGMface(PGMobject):
 
     def set_diff_surf(self, val, ind_i=None, ind_j=None, 
                       ind_u=None, ind_v=None):
+        # This takes care of surface-surface and surface-edge continuity
+        # ind_i and ind_j refer to the surface position on the face
+        # ind_u and ind_v are related to the edges/corners of the surface
+        #
+        #
+        #     +-------+-------+-------+
+        #     | (0,2) | (1,2) | (2,2) |
+        #     +-------+-------+-------+
+        #     | (0,1) | (1,1) | (2,1) |
+        #  v  +-------+-------+-------+
+        #  ^  | (0,0) | (1,0) | (2,0) |
+        #  |  +-------+-------+-------+
+        #  +--> u
+        #
+        # The corners ((0,0), (2,0), (2,2), and (0,2)) refer to the corners of the surface,
+        # while the middle slots ((1,0), (2,1), (1,2), and (0,1)) refer to the edges of the surface.
+        # The central slot (1,1) has no meaning.
+        
         for isurf in self._get_surf_indices(ind_i, ind_j):
             if isurf != -1:
                 self._bse.set_diff_surf(val, isurf, ind_u, ind_v)

@@ -48,6 +48,20 @@ class PGMtip2(PGMinterpolant):
         self.faces[''] = PGMface(nx, ny)
 
     def set_diff(self):
+
+        #u - LE to TE
+        #v - down to up
+        #
+        #      v
+        #      ^
+        #      |   upper skin
+        #      +--------------------+
+        #      |                    |
+        #   LE |                    | TE
+        #      |                    |
+        #      +--------------------+---> u
+        #          lower skin
+
         # Get reference to the tip face
         face = self.faces['']
 
@@ -56,15 +70,25 @@ class PGMtip2(PGMinterpolant):
 
         # Then check if we need to turn off continuity at the trailing edge
         if not self._comp._round_te:
+            # Trailing edge
             #face.set_diff_surf(False, ind_i=-1, ind_u=2)
             #face.set_diff_corner(False, ind_i=-1, ind_j=0)
             #face.set_diff_corner(False, ind_i=-1, ind_j=-1)
+            # Leading edge interface
+            #face.set_diff_surf(False, ind_i=0, ind_u=0)
+            # Lower skin interface
+            #face.set_diff_surf(False, ind_j=0, ind_v=0)
+            # Upper skin interface
+            #face.set_diff_surf(False, ind_j=-1, ind_v=2)
+            # Corners with leading edge
+            #face.set_diff_corner(False, ind_i=0, ind_j=0)
+            #face.set_diff_corner(False, ind_i=0, ind_j=-1)
             pass
 
     def compute(self, name):
+        # Get reference to the only face that exist in the tip component
         face = self.faces['']
-        #num_u = self._comp.faces['upp']._num_cp_total['u']
-        #num_v = self._comp.faces['le']._num_cp_total['u']
+        # Get the number of control points
         num_u = face._num_cp_total['u']
         num_v = face._num_cp_total['v']
 
@@ -75,6 +99,7 @@ class PGMtip2(PGMinterpolant):
             top = self._comp.faces['le']
             lft = self._comp.faces['low']
             bot = self._comp.faces['te']
+            # Get the two rows of control points of the primary component that are closest to the boundary
             if self._side == 'right':
                 W = rgt.vec_inds['cp_prim'][::-1,:2,:]
                 N = top.vec_inds['cp_prim'][:,:2,:]
@@ -89,11 +114,6 @@ class PGMtip2(PGMinterpolant):
             nD += 3 * 2 * num_v + 3 * 2 * (num_u - 2)
             nD += 3 * 8 * (num_v - 3 + num_u - 3)
             nD += 3 * 8
-
-            print E.shape
-            print N.shape
-            print W.shape
-            print S.shape
 
             Da, Di, Dj = PGMlib.computeconewireframe(nD, num_u, num_v, 1.0, self._weight, W, E, N, S, face.vec_inds['cp_bez'])
             Das, Dis, Djs = super(PGMtip2, self).compute(name) #We will recover identity matrices just to carry over the normal parameters (Check PGMinterpolant.py)

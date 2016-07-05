@@ -21,7 +21,7 @@ subroutine computeTip(nD, nu, nv, f0, N, S, inds, Da, Di, Dj)
 
   !Working
   integer i, j, k, iD
-  double precision den, C(4), u
+  double precision den, C(4), u, x_c, f
   real, parameter :: pi = 3.1415927
 
   Da(:) = 0.0
@@ -56,8 +56,9 @@ subroutine computeTip(nD, nu, nv, f0, N, S, inds, Da, Di, Dj)
   do i=2,nu-1
      u = den * (i-1)
      do j=1,nv
-        f = f0*sin(pi/2.0*(j-1)/nv-1))
-        call sparseBezier(u, -f0, f0, C)
+        x_c = dble(j-1)/dble(nv-1)
+        f = f0*(0.5+5*sqrt(dist(x_c)))
+        call sparseBezier(u, -f, f, C)
         do k=1,3
            Da(iD+1:iD+4) = C(:)
            Di(iD+1:iD+4) = inds(i, j, k)
@@ -74,5 +75,24 @@ subroutine computeTip(nD, nu, nv, f0, N, S, inds, Da, Di, Dj)
      print *, 'Error in computeTip', iD, nD
   end if
 
+  ! Auxiliary function
+
+  contains
+
+    function dist(x)
+      ! This functions gives a number between 0 and 1
+      ! that will be applied to the interpolant weights f0
+      ! so that the tip becomes rounded when seen from a top view
+      
+      ! Function inputs
+      double precision, intent(in) :: x
+
+      ! Function output
+      double precision :: dist
+
+      ! Use naca airfoil polynomial
+      dist = 10.0*(0.2969*sqrt(x) - 0.1260*x - 0.3516*x*x + 0.2843*x*x*x - 0.1036*x*x*x*x)
+
+    end function dist
 
 end subroutine computeTip
